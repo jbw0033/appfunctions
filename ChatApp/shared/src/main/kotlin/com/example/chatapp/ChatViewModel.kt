@@ -16,6 +16,7 @@
 package com.example.chatapp
 
 import android.net.Uri
+import androidx.appstate.statestore.StateStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.chatapp.appfunctions.AppFunctions.Recipient
@@ -23,6 +24,7 @@ import com.example.chatapp.data.CallManager
 import com.example.chatapp.data.DisplayMessage
 import com.example.chatapp.data.MessageRepository
 import com.example.chatapp.data.RecipientsRepository
+import com.example.chatapp.data.currentUserName
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -74,6 +76,7 @@ class ChatViewModel
         private val messageRepository: MessageRepository,
         private val callManager: CallManager,
         private val recipientsRepository: RecipientsRepository,
+        private val stateStore: StateStore,
     ) : ViewModel() {
         @AssistedFactory
         interface Factory {
@@ -119,7 +122,7 @@ class ChatViewModel
                         content = "📞 Call ended",
                         sentAt = System.currentTimeMillis(),
                         isInbound = false,
-                        senderName = "Me",
+                        senderName = stateStore.currentUserName().value,
                     )
                 messageRepository.saveMessage(activeRecipient.id, callLogMessage)
             }
@@ -137,7 +140,7 @@ class ChatViewModel
                         DisplayMessage(
                             content = message,
                             sentAt = System.currentTimeMillis(),
-                            senderName = "Me",
+                            senderName = stateStore.currentUserName().value,
                             images = images,
                         )
                     messageRepository.saveMessage(recipientId, userMessage)

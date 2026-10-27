@@ -18,7 +18,9 @@ package com.example.chatapp.wear
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.appstate.statestore.StateStore
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -27,11 +29,15 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.wear.compose.material3.MaterialTheme
+import com.example.chatapp.data.AppScreen
+import com.example.chatapp.data.currentScreen
+import com.example.chatapp.data.setCurrentScreen
 import com.example.chatapp.wear.uicomponents.WearAppFunctionsScreen
 import com.example.chatapp.wear.uicomponents.WearCallScreen
 import com.example.chatapp.wear.uicomponents.WearChatScreen
 import com.example.chatapp.wear.uicomponents.WearRecipientsScreen
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -47,17 +53,34 @@ sealed interface Screen : NavKey {
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    /** Application-level state shared with the AppFunctions service. */
+    @Inject lateinit var stateStore: StateStore
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            WearApp()
+            WearApp(stateStore)
         }
     }
 }
 
 @Composable
-fun WearApp() {
+fun WearApp(stateStore: StateStore) {
     val backStack = remember { mutableStateListOf<Screen>(Screen.Recipients) }
+
+    // Keep the shared StateStore and the back stack in sync: show the screen when it is changed
+    // outside the UI (for example by an agent calling the changeScreen AppFunction), and report
+    // the screen the user navigates to.
+    val currentScreen = stateStore.currentScreen().value
+    LaunchedEffect(currentScreen) {
+        if (backStack.last().toAppScreen() != currentScreen) {
+            backStack.show(currentScreen)
+        }
+    }
+    LaunchedEffect(backStack.last()) {
+        // Read the live back stack: the effect above may have just navigated.
+        stateStore.setCurrentScreen(backStack.last().toAppScreen())
+    }
 
     MaterialTheme {
         NavDisplay(
@@ -97,5 +120,22 @@ fun WearApp() {
                     }
                 },
         )
+    }
+}
+
+private fun Screen.toAppScreen(): AppScreen =
+    when (this) {
+        Screen.Recipients -> AppScreen.ChatList
+        Screen.Settings -> AppScreen.Settings
+        is Screen.Chat -> AppScreen.Chat(recipientId)
+        is Screen.Call -> AppScreen.Call(recipientId)
+    }
+
+private fun MutableList<Screen>.show(screen: AppScreen) {
+    when (screen) {
+        AppScreen.ChatList -> subList(1, size).clear()
+        AppScreen.Settings -> add(Screen.Settings)
+        is AppScreen.Chat -> add(Screen.Chat(screen.endpointValue))
+        is AppScreen.Call -> add(Screen.Call(screen.endpointValue))
     }
 }

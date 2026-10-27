@@ -23,8 +23,26 @@ This sample demonstrates how to define and provide the following AppFunctions in
 - `searchContacts(query: String, filterType: String)`: Search for contacts or groups. `filterType` must be "INDIVIDUAL" or "GROUP".
 - `send(name: String, endpointValue: String, messageBody: String, imageUri: Uri? = null)`: Sends a message to a recipient.
 - `makeCall(contactName: String? = null, endpointValue: String? = null)`: Initiates a call to a recipient.
+- `changeUser(userName: String)`: Changes the user signed in to the app.
+- `changeScreen(screen: String, endpointValue: String? = null)`: Changes the screen the app shows. `screen` must be "CHAT_LIST", "CHAT" (requires `endpointValue`), or "SETTINGS".
 
 These functions are annotated with `@AppFunction`, allowing them to be discovered and executed by the system.
+
+### Sharing app state with agents (StateStore)
+
+Application-level state that both the AppFunctions service and the UI need, such as the current
+user and the screen being shown, lives in a single [AppState `StateStore`](https://developer.android.com/jetpack/androidx/releases/appstate)
+provided by Hilt (`StateStoreModule` in `shared/.../data/ChatAppState.kt`). Because the service and
+the activity run in the same process and share that instance, changes flow both ways:
+
+- `changeUser` and `changeScreen` each change one piece of that state. The chat list shows the
+  current user, whose name is also used as the sender name of outgoing messages.
+- `MainActivity` (phone and Wear) keeps navigation in sync with the current screen: when an agent
+  calls `changeScreen`, the app navigates there, and when the user navigates, the app records the
+  new screen.
+
+The `StateStore` artifacts are only published as androidx.dev snapshots, so `settings.gradle.kts`
+adds the snapshot repository, filtered to the `androidx.appstate.*` groups.
 
 ### AppFunctionSerializable
 
@@ -58,6 +76,24 @@ adb shell "cmd app_function execute-app-function \
   --package com.example.chatapp \
   --function 'com.example.chatapp.appfunctions.AppFunctions#searchContacts' \
   --parameters '{\"query\": \"Alice\", \"filterType\": \"INDIVIDUAL\"}'"
+```
+
+To change the signed-in user:
+
+```bash
+adb shell "cmd app_function execute-app-function \
+  --package com.example.chatapp \
+  --function 'com.example.chatapp.appfunctions.AppFunctions#changeUser' \
+  --parameters '{\"userName\": \"Jordan\"}'"
+```
+
+To open the chat with Bob (with the app in the foreground, it navigates there right away):
+
+```bash
+adb shell "cmd app_function execute-app-function \
+  --package com.example.chatapp \
+  --function 'com.example.chatapp.appfunctions.AppFunctions#changeScreen' \
+  --parameters '{\"screen\": \"CHAT\", \"endpointValue\": \"2\"}'"
 ```
 
 ## License

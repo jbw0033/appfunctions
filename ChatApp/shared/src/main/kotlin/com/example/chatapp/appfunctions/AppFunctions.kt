@@ -25,9 +25,13 @@ import androidx.appfunctions.AppFunctionInvalidArgumentException
 import androidx.appfunctions.AppFunctionSerializable
 import androidx.appfunctions.AppFunctionStringValueConstraint
 import androidx.appfunctions.service.AppFunction
+import androidx.appstate.statestore.StateStore
 import com.example.chatapp.data.CallManager
 import com.example.chatapp.data.MessageRepository
 import com.example.chatapp.data.RecipientsRepository
+import com.example.chatapp.data.AppScreen
+import com.example.chatapp.data.setCurrentScreen
+import com.example.chatapp.data.setCurrentUserName
 import javax.inject.Inject
 
 /**
@@ -39,6 +43,7 @@ class AppFunctions
         private val messageRepository: MessageRepository,
         private val recipientsRepository: RecipientsRepository,
         private val callManager: CallManager,
+        private val stateStore: StateStore,
     ) {
         /**
          * Search for contacts or groups by name.
@@ -182,6 +187,69 @@ class AppFunctions
                     .apply { putExtra("nav_route", "call/${recipient.id}") },
                 PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE,
             )
+        }
+
+        /**
+         * Change the user signed in to the chat app.
+         *
+         * @param appFunctionContext The context of this app function call.
+         * @param userName The display name of the user to switch to. It is shown on the chat list
+         *   and used as the sender name of the messages the user sends. Cannot be blank.
+         */
+        @AppFunction(isDescribedByKDoc = true)
+        suspend fun changeUser(
+            appFunctionContext: AppFunctionContext,
+            userName: String,
+        ): String {
+            if (userName.isBlank()) {
+                throw AppFunctionInvalidArgumentException("userName cannot be blank.")
+            }
+            stateStore.setCurrentUserName(userName.trim())
+            return "Signed in as ${userName.trim()}."
+        }
+
+        /**
+         * Change the screen shown in the chat app.
+         *
+         * @param appFunctionContext The context of this app function call.
+         * @param screen The screen to show: "CHAT_LIST" for the list of all conversations, "CHAT"
+         *   for a single conversation (requires `endpointValue`), or "SETTINGS" for the app's
+         *   settings. If the app is open, it navigates there right away. To start a call, use
+         *   `makeCall` instead.
+         * @param endpointValue The unique identifier of the contact or group whose conversation to
+         *   show, as returned by `searchContacts`. Required when `screen` is "CHAT".
+         */
+        @AppFunction(isDescribedByKDoc = true)
+        suspend fun changeScreen(
+            appFunctionContext: AppFunctionContext,
+            @AppFunctionStringValueConstraint(enumValues = ["CHAT_LIST", "CHAT", "SETTINGS"])
+            screen: String,
+            endpointValue: String? = null,
+        ): String {
+            val (appScreen, confirmation) =
+                when (screen) {
+                    "CHAT_LIST" -> AppScreen.ChatList to "Showing the chat list."
+                    "SETTINGS" -> AppScreen.Settings to "Showing settings."
+                    "CHAT" -> {
+                        if (endpointValue.isNullOrBlank()) {
+                            throw AppFunctionInvalidArgumentException(
+                                "endpointValue is required when screen is CHAT.",
+                            )
+                        }
+                        val name =
+                            recipientsRepository.getRecipientById(endpointValue)?.name
+                                ?: recipientsRepository.getGroupById(endpointValue)?.name
+                                ?: throw AppFunctionElementNotFoundException(
+                                    "No contact or group found for endpointValue: $endpointValue",
+                                )
+                        AppScreen.Chat(endpointValue) to "Showing the chat with $name."
+                    }
+                    else -> throw AppFunctionInvalidArgumentException(
+                        "screen must be CHAT_LIST, CHAT, or SETTINGS.",
+                    )
+                }
+            stateStore.setCurrentScreen(appScreen)
+            return confirmation
         }
 
         /** Represents a result from a contact or group search. */

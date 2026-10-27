@@ -21,12 +21,16 @@ import androidx.appfunctions.AppFunctionAppUnknownException
 import androidx.appfunctions.AppFunctionContext
 import androidx.appfunctions.AppFunctionElementNotFoundException
 import androidx.appfunctions.AppFunctionInvalidArgumentException
+import androidx.appstate.statestore.StateStore
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.chatapp.data.CallManager
 import com.example.chatapp.data.DisplayMessage
 import com.example.chatapp.data.MessageRepository
 import com.example.chatapp.data.RecipientsRepository
+import com.example.chatapp.data.AppScreen
+import com.example.chatapp.data.currentScreen
+import com.example.chatapp.data.currentUserName
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -85,7 +89,58 @@ class AppFunctionsTest {
 
     private val callManager = CallManager(recipientsRepository)
 
-    private val appFunctions = AppFunctions(messageRepository, recipientsRepository, callManager)
+    private val stateStore = StateStore()
+
+    private val appFunctions =
+        AppFunctions(messageRepository, recipientsRepository, callManager, stateStore)
+
+    @Test
+    fun changeUser_updatesStateStore() {
+        runTest {
+            val result = appFunctions.changeUser(testContext, " Jordan ")
+            Assert.assertEquals("Signed in as Jordan.", result)
+            Assert.assertEquals("Jordan", stateStore.currentUserName().value)
+        }
+    }
+
+    @Test(expected = AppFunctionInvalidArgumentException::class)
+    fun changeUser_blankName_fails() {
+        runTest { appFunctions.changeUser(testContext, " ") }
+    }
+
+    @Test
+    fun changeScreen_chat_updatesStateStore() {
+        runTest {
+            val result = appFunctions.changeScreen(testContext, "CHAT", endpointValue = "g1")
+            Assert.assertEquals("Showing the chat with Work Friends.", result)
+            Assert.assertEquals(AppScreen.Chat("g1"), stateStore.currentScreen().value)
+        }
+    }
+
+    @Test
+    fun changeScreen_chatListAndSettings_updateStateStore() {
+        runTest {
+            appFunctions.changeScreen(testContext, "SETTINGS")
+            Assert.assertEquals(AppScreen.Settings, stateStore.currentScreen().value)
+            appFunctions.changeScreen(testContext, "CHAT_LIST")
+            Assert.assertEquals(AppScreen.ChatList, stateStore.currentScreen().value)
+        }
+    }
+
+    @Test(expected = AppFunctionInvalidArgumentException::class)
+    fun changeScreen_chatWithoutEndpoint_fails() {
+        runTest { appFunctions.changeScreen(testContext, "CHAT") }
+    }
+
+    @Test(expected = AppFunctionElementNotFoundException::class)
+    fun changeScreen_unknownChat_fails() {
+        runTest { appFunctions.changeScreen(testContext, "CHAT", endpointValue = "nonexistent") }
+    }
+
+    @Test(expected = AppFunctionInvalidArgumentException::class)
+    fun changeScreen_unknownScreen_fails() {
+        runTest { appFunctions.changeScreen(testContext, "CALL") }
+    }
 
     @Test(expected = AppFunctionInvalidArgumentException::class)
     fun searchContacts_returnsEmptyList() {

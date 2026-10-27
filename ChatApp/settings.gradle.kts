@@ -31,6 +31,14 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // AppState (StateStore) is only available as an androidx.dev snapshot.
+        maven {
+            url = uri("https://androidx.dev/snapshots/builds/16650541/artifacts/repository")
+            content {
+                includeGroup("androidx.appstate.statestore")
+                includeGroup("androidx.appstate.transform")
+            }
+        }
     }
 }
 

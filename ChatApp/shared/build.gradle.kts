@@ -42,6 +42,9 @@ dependencies {
     implementation(libs.hilt.android.core)
     ksp(libs.hilt.compiler)
 
+    // StateStore: application-level state shared by the AppFunctions service and the UI
+    api(libs.androidx.appstate.statestore)
+
     // App functions
     implementation(libs.androidx.appfunctions)
     implementation(libs.androidx.appfunctions.service)

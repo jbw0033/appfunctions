@@ -19,24 +19,36 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.appstate.statestore.StateStore
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
+import com.example.chatapp.data.AppScreen
+import com.example.chatapp.data.currentScreen
+import com.example.chatapp.data.setCurrentScreen
 import com.example.chatapp.ui.theme.ChatAppTheme
 import com.example.chatapp.uicomponents.AppFunctionsScreen
 import com.example.chatapp.uicomponents.CallScreen
 import com.example.chatapp.uicomponents.ChatScreen
 import com.example.chatapp.uicomponents.RecipientsScreen
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    /** Application-level state shared with the AppFunctions service. */
+    @Inject lateinit var stateStore: StateStore
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -51,6 +63,22 @@ class MainActivity : ComponentActivity() {
                             launchSingleTop = true
                         }
                     }
+                }
+
+                // Keep the shared StateStore and navigation in sync: show the screen when it is
+                // changed outside the UI (for example by an agent calling the changeScreen
+                // AppFunction), and report the screen the user navigates to.
+                val currentScreen = stateStore.currentScreen().value
+                LaunchedEffect(currentScreen) {
+                    val shownScreen = navController.currentBackStackEntry?.toAppScreen()
+                    if (shownScreen != null && shownScreen != currentScreen) {
+                        navController.show(currentScreen)
+                    }
+                }
+                val currentEntry by navController.currentBackStackEntryAsState()
+                LaunchedEffect(currentEntry) {
+                    // Read the live entry: the effect above may have just navigated.
+                    navController.currentBackStackEntry?.toAppScreen()?.let(stateStore::setCurrentScreen)
                 }
 
                 NavHost(navController = navController, startDestination = "recipients") {
@@ -101,6 +129,26 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+}
+
+private fun NavBackStackEntry.toAppScreen(): AppScreen? {
+    val recipientId = arguments?.getString("recipientId")
+    return when (destination.route) {
+        "recipients" -> AppScreen.ChatList
+        "functions" -> AppScreen.Settings
+        "chat/{recipientId}" -> recipientId?.let(AppScreen::Chat)
+        "call/{recipientId}" -> recipientId?.let(AppScreen::Call)
+        else -> null
+    }
+}
+
+private fun NavController.show(screen: AppScreen) {
+    when (screen) {
+        AppScreen.ChatList -> popBackStack(route = "recipients", inclusive = false)
+        AppScreen.Settings -> navigate("functions") { launchSingleTop = true }
+        is AppScreen.Chat -> navigate("chat/${screen.endpointValue}") { launchSingleTop = true }
+        is AppScreen.Call -> navigate("call/${screen.endpointValue}") { launchSingleTop = true }
     }
 }
 

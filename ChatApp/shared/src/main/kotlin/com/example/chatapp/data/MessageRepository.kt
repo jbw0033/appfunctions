@@ -16,6 +16,7 @@
 package com.example.chatapp.data
 
 import android.net.Uri
+import androidx.appstate.statestore.StateStore
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -74,7 +75,9 @@ interface MessageRepository {
 @Singleton
 class MessageRepositoryImpl
     @Inject
-    constructor() : MessageRepository {
+    constructor(
+        private val stateStore: StateStore,
+    ) : MessageRepository {
         // Used for message delays.
         private val random = Random(System.currentTimeMillis())
 
@@ -118,7 +121,7 @@ class MessageRepositoryImpl
                         content = text,
                         sentAt = sentAt,
                         isInbound = false,
-                        senderName = "Me",
+                        senderName = stateStore.currentUserName().value,
                         images = imageUris?.map { Uri.parse(it) } ?: emptyList(),
                     ),
                 )

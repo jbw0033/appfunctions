@@ -22,10 +22,14 @@ import androidx.appfunctions.AppFunctionManager
 import androidx.appfunctions.AppFunctionSearchSpec
 import androidx.appfunctions.ExecuteAppFunctionRequest
 import androidx.appfunctions.ExecuteAppFunctionResponse
+import androidx.appstate.statestore.StateStore
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.chatapp.data.MessageRepository
 import com.example.chatapp.data.RecipientsRepository
+import com.example.chatapp.data.AppScreen
+import com.example.chatapp.data.currentScreen
+import com.example.chatapp.data.currentUserName
 import com.google.common.truth.Truth.assertThat
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
@@ -52,6 +56,8 @@ class AppFunctionInstrumentationTest {
     @Inject lateinit var recipientsRepository: RecipientsRepository
 
     @Inject lateinit var appFunctions: AppFunctions
+
+    @Inject lateinit var stateStore: StateStore
 
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val appFunctionManager: AppFunctionManager =
@@ -172,4 +178,55 @@ class AppFunctionInstrumentationTest {
                     AppFunctions.ContactSearchResult(endpointValue = "1", endpointType = "INDIVIDUAL", displayName = "Alice Smith"),
                 )
         }
+
+    @Test
+    fun testChangeUser_updatesSharedStateStore() =
+        runBlocking<Unit> {
+            val metadata = functionMetadata(AppFunctionsIds.CHANGE_USER_ID)
+            val request =
+                ExecuteAppFunctionRequest(
+                    targetPackageName = context.packageName,
+                    AppFunctionsIds.CHANGE_USER_ID,
+                    AppFunctionData.Builder(metadata.parameters, metadata.components)
+                        .setString("userName", "Jordan")
+                        .build(),
+                )
+
+            val response = appFunctionManager.executeAppFunction(request)
+            val successResponse = assertIs<ExecuteAppFunctionResponse.Success>(response)
+            assertThat(
+                successResponse.returnValue.getString(ExecuteAppFunctionResponse.Success.PROPERTY_RETURN_VALUE),
+            ).isEqualTo("Signed in as Jordan.")
+            // The same StateStore instance is shared with the rest of the app.
+            assertThat(stateStore.currentUserName().value).isEqualTo("Jordan")
+        }
+
+    @Test
+    fun testChangeScreen_updatesSharedStateStore() =
+        runBlocking<Unit> {
+            val metadata = functionMetadata(AppFunctionsIds.CHANGE_SCREEN_ID)
+            val request =
+                ExecuteAppFunctionRequest(
+                    targetPackageName = context.packageName,
+                    AppFunctionsIds.CHANGE_SCREEN_ID,
+                    AppFunctionData.Builder(metadata.parameters, metadata.components)
+                        .setString("screen", "CHAT")
+                        .setString("endpointValue", "2")
+                        .build(),
+                )
+
+            val response = appFunctionManager.executeAppFunction(request)
+            val successResponse = assertIs<ExecuteAppFunctionResponse.Success>(response)
+            assertThat(
+                successResponse.returnValue.getString(ExecuteAppFunctionResponse.Success.PROPERTY_RETURN_VALUE),
+            ).isEqualTo("Showing the chat with Bob Johnson.")
+            assertThat(stateStore.currentScreen().value).isEqualTo(AppScreen.Chat("2"))
+        }
+
+    private suspend fun functionMetadata(id: String) =
+        appFunctionManager
+            .observeAppFunctions(AppFunctionSearchSpec(packageNames = setOf(context.packageName)))
+            .first()
+            .flatMap { it.appFunctions }
+            .single { it.id == id }
 }

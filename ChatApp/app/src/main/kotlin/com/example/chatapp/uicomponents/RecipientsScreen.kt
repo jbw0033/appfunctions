@@ -72,7 +72,15 @@ fun RecipientsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Chats") },
+                title = {
+                    Column {
+                        Text("Chats")
+                        Text(
+                            text = "Signed in as ${viewModel.currentUserName.value}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                },
                 actions = {
                     IconButton(onClick = onSettingsClick) {
                         Icon(
